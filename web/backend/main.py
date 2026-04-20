@@ -43,30 +43,59 @@ except Exception as e:
     print(f"Error loading kernel: {e}")
     pixel_sort_kernel = None
 
-def apply_pixel_sort(img_np, threshold, mode, direction):
+def apply_pixel_sort(img_np, threshold, mode, direction, sorting_style=0, masking=0, mask_rect=""):
     if pixel_sort_kernel is None:
         raise RuntimeError("CUDA Kernel not initialized. Please ensure the CUDA Toolkit and NVRTC are properly installed for GPU compilation.")
         
-    # Handle Direction using Rotations/Flips to keep the CUDA kernel simple and fast (1D horizontal sort)
-    if direction == 1: # Right to Left
-        img_np = cv2.flip(img_np, 1)
-    elif direction == 2: # Top to Bottom
-        img_np = cv2.rotate(img_np, cv2.ROTATE_90_COUNTERCLOCKWISE)
-    elif direction == 3: # Bottom to Top
-        img_np = cv2.rotate(img_np, cv2.ROTATE_90_CLOCKWISE)
-
     height, width, channels = img_np.shape
     if channels != 3:
         raise ValueError("Image must have 3 channels (BGR)")
 
+    # Build masking array
+    mask_np = np.ones((height, width), dtype=np.uint8) * 255
+    if masking > 0 and mask_rect:
+        try:
+            parts = mask_rect.split(',')
+            x = max(0.0, min(1.0, float(parts[0])))
+            y = max(0.0, min(1.0, float(parts[1])))
+            w = max(0.0, min(1.0, float(parts[2])))
+            h_rect = max(0.0, min(1.0, float(parts[3])))
+            
+            px = int(x * width)
+            py = int(y * height)
+            pw = int(w * width)
+            ph = int(h_rect * height)
+            
+            if masking == 1: # Inside mask
+                mask_np[:] = 0
+                mask_np[py:py+ph, px:px+pw] = 255
+            elif masking == 2: # Outside mask
+                mask_np[py:py+ph, px:px+pw] = 0
+        except Exception as e:
+            print("Mask parsing error:", e)
+
     img_np_contig = np.ascontiguousarray(img_np, dtype=np.uint8)
     img_cp = cp.asarray(img_np_contig)
-    
+    mask_cp = cp.asarray(mask_np)
+
+    # Handle Direction using Rotations/Flips to keep the CUDA kernel simple and fast (1D horizontal sort)
+    if direction == 1: # Right to Left
+        img_cp = cp.flip(img_cp, 1)
+        mask_cp = cp.flip(mask_cp, 1)
+    elif direction == 2: # Top to Bottom
+        img_cp = cp.asarray(cv2.rotate(cp.asnumpy(img_cp), cv2.ROTATE_90_COUNTERCLOCKWISE))
+        mask_cp = cp.asarray(cv2.rotate(cp.asnumpy(mask_cp), cv2.ROTATE_90_COUNTERCLOCKWISE))
+        height, width = img_cp.shape[0], img_cp.shape[1]
+    elif direction == 3: # Bottom to Top
+        img_cp = cp.asarray(cv2.rotate(cp.asnumpy(img_cp), cv2.ROTATE_90_CLOCKWISE))
+        mask_cp = cp.asarray(cv2.rotate(cp.asnumpy(mask_cp), cv2.ROTATE_90_CLOCKWISE))
+        height, width = img_cp.shape[0], img_cp.shape[1]
+
     block_size = 256
     grid_size = (height + block_size - 1) // block_size
     
     # Execute the CUDA kernel
-    pixel_sort_kernel((grid_size,), (block_size,), (img_cp, np.int32(width), np.int32(height), np.int32(threshold), np.int32(mode)))
+    pixel_sort_kernel((grid_size,), (block_size,), (img_cp, mask_cp, np.int32(width), np.int32(height), np.int32(threshold), np.int32(mode), np.int32(sorting_style), np.int32(masking)))
     
     result_np = cp.asnumpy(img_cp)
     
@@ -85,7 +114,10 @@ async def process_image(
     file: UploadFile = File(...),
     threshold: int = Form(...),
     mode: int = Form(...),
-    direction: int = Form(0) # Default LTR
+    direction: int = Form(0), # Default LTR
+    sorting_style: int = Form(0),
+    masking: int = Form(0),
+    mask_rect: str = Form("")
 ):
     contents = await file.read()
     nparr = np.frombuffer(contents, np.uint8)
@@ -96,7 +128,7 @@ async def process_image(
 
     try:
         # Process image purely on GPU
-        result_img = apply_pixel_sort(img, threshold, mode, direction)
+        result_img = apply_pixel_sort(img, threshold, mode, direction, sorting_style, masking, mask_rect)
         
         # Encode back to JPEG
         _, encoded_img = cv2.imencode('.jpg', result_img)
@@ -109,3 +141,6 @@ async def process_image(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
+# Restart Trigger
+
