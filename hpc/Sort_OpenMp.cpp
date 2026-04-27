@@ -97,7 +97,7 @@ int main() {
     ofstream file("output.txt");
     file << "N,SEQ_TIME,PAR_TIME,SPEEDUP,EFFICIENCY\n";
 
-    for (int N = 100; N <= 50000; N += 10000) {
+    for (int N = 1000; N <= 50000; N += 10000) {
 
         vector<int> arr(N);
 

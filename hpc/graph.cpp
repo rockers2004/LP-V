@@ -154,7 +154,7 @@ int main() {
 
     omp_set_num_threads(8);  // adjust based on your CPU
 
-    for (int N = 100; N <= 30000; N += 2000) {
+    for (int N = 100; N <= 200000; N += 10000) {
 
         Graph g(N);
 
