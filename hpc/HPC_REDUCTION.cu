@@ -22,7 +22,7 @@ __global__ void sum_reduction(float* d_out, float* d_in, int n) {
         d_out[blockIdx.x] = sdata[0];
 }
 
-// -------- FULL REDUCTION (IMPORTANT FIX) --------
+// -------- FULL REDUCTION --------
 float gpu_sum(float* d_in, int n) {
     int threads = 256;
     int blocks = (n + threads - 1) / threads;
@@ -68,7 +68,7 @@ void run_test(int n, std::ofstream& outfile) {
     auto end_p = std::chrono::high_resolution_clock::now();
     double time_p = std::chrono::duration<double, std::milli>(end_p - start_p).count();
 
-    int cores = 2560; // RTX 3060 GPU cores
+    int cores = 2560; 
 
     double speedup = time_s / time_p;
     double efficiency = speedup / cores;

@@ -8,9 +8,7 @@ using namespace std;
 // ---------------- GPU KERNEL ----------------
 __global__ void mandelbrotKernel(int *image, int width, int height, int max_iter) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
-
-    if (x < width && y < height) {
+    int < width && y < height) {
 
         float zx = 0.0f, zy = 0.0f;
         float cx = (x - width / 2.0f) * 4.0f / width;
@@ -26,7 +24,9 @@ __global__ void mandelbrotKernel(int *image, int width, int height, int max_iter
         }
 
         image[y * width + x] = count;
-    }
+    } y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (x
 }
 
 // ---------------- CPU VERSION ----------------

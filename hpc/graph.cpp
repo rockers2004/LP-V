@@ -59,13 +59,14 @@ public:
             {
                 vector<int> local_next;
 
-                #pragma omp for schedule(guided)
-                for (int i = 0; i < frontier.size(); i++) {
+                // schedule(guided) allows dynamic load balancing with decreasing chunk sizes
+                #pragma omp for schedule(guided, 1)
+                for (size_t i = 0; i < frontier.size(); i++) {
                     int node = frontier[i];
 
                     for (int n : adj[node]) {
 
-                        // LOCK-FREE VISITED CHECK
+                        // LOCK-FREE VISITED CHECK using atomic CAS
                         if (!visited[n]) {
                             if (__sync_bool_compare_and_swap(&visited[n], 0, 1)) {
                                 local_next.push_back(n);
@@ -74,7 +75,7 @@ public:
                     }
                 }
 
-                // Merge once per thread
+                // Merge once per thread to reduce contention on critical section
                 #pragma omp critical
                 next_frontier.insert(next_frontier.end(),
                                      local_next.begin(),
@@ -120,8 +121,9 @@ public:
             {
                 vector<int> local_next;
 
-                #pragma omp for schedule(guided)
-                for (int i = 0; i < current.size(); i++) {
+                // schedule(guided, 1) provides dynamic load balancing with small chunks
+                #pragma omp for schedule(guided, 1)
+                for (size_t i = 0; i < current.size(); i++) {
                     int node = current[i];
 
                     if (!visited[node]) {
@@ -152,7 +154,11 @@ int main() {
     ofstream file("result.txt");
     file << "N,SEQ_TIME,PAR_TIME,SPEEDUP,EFFICIENCY\n";
 
-    omp_set_num_threads(8);  // adjust based on your CPU
+    // Let OpenMP automatically determine optimal number of threads
+    // based on the system (CPU cores, environment variables, etc.)
+    // You can also set OMP_NUM_THREADS environment variable to override
+    int max_threads = omp_get_max_threads();
+    cout << "Using " << max_threads << " threads automatically detected by OpenMP\n\n";
 
     for (int N = 100; N <= 200000; N += 10000) {
 
